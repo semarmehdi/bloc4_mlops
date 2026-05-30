@@ -1,0 +1,22 @@
+# mac
+.DS_Store
+
+# env
+.env
+**/.env
+
+# local dev sandbox
+dev/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# sous repo
+model_api_HF/
+mlflow_HF/
+ibmattritionapi/
+
+# docker
+*.pid

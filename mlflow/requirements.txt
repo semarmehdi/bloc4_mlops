@@ -1,0 +1,13 @@
+mlflow==3.5.0
+scikit-learn==1.6.1
+pandas>=2.0
+numpy>=1.26
+psycopg2-binary
+jupyter
+openpyxl
+requests>=2.31.0,<3
+boto3
+gunicorn
+matplotlib 
+seaborn 
+plotly

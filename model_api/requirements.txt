@@ -1,0 +1,14 @@
+fastapi[standard]
+pydantic>=2.0
+typing 
+pandas>=2.0
+numpy>=1.26
+openpyxl 
+mlflow==3.5.0
+requests>=2.31.0,<3
+boto3 
+scikit-learn==1.6.1
+python-multipart
+fsspec
+s3fs
+python-dotenv

@@ -1,0 +1,56 @@
+name: IBM Attrition ETL CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-test-etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-tests.txt
+
+      - name: Run tests (pytest)
+        run: pytest -v
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Build Docker image
+        run: docker build -t ibm-attrition-etl .
+
+      - name: Run ETL container
+        run: docker run --rm --env-file <(env) ibm-attrition-etl
+        env:
+          IBM_ATTRITION_BASE_URL: ${{ secrets.IBM_ATTRITION_BASE_URL }}
+          IBM_ATTRITION_ENDPOINT: ${{ secrets.IBM_ATTRITION_ENDPOINT }}
+          IBM_ATTRITION_BATCH_SIZE: ${{ vars.IBM_ATTRITION_BATCH_SIZE }}
+          IBM_ATTRITION_SLEEP_SECONDS: ${{ vars.IBM_ATTRITION_SLEEP_SECONDS }}
+          IBM_ATTRITION_MODEL_API_BASE_URL: ${{ secrets.IBM_ATTRITION_MODEL_API_BASE_URL }}
+          IBM_ATTRITION_MODEL_API_PREDICT_ENDPOINT: ${{ vars.IBM_ATTRITION_MODEL_API_PREDICT_ENDPOINT }}
+          IBM_ATTRITION_MODEL_API_TIMEOUT: ${{ vars.IBM_ATTRITION_MODEL_API_TIMEOUT }}
+          S3BucketName: ${{ secrets.S3BUCKETNAME }}
+          IBM_ATTRITION_S3_PREFIX: ${{ secrets.IBM_ATTRITION_S3_PREFIX }}
+          IBM_ATTRITION_S3_PRED_PREFIX: ${{ secrets.IBM_ATTRITION_S3_PRED_PREFIX }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_TARGET_TABLE: ${{ vars.DB_TARGET_TABLE }}
+
+      - name: List files after Docker run (debugging)
+        run: |
+          echo "Repository files:"
+          ls -R .
