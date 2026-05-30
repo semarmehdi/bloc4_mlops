@@ -63,12 +63,6 @@ app = FastAPI(
 )
 
 
-class BlogArticles(BaseModel):
-    title: str
-    content: str
-    author: str = "Anonymous Author"
-
-
 class PredictionFeatures(BaseModel):
     Age: Union[int, float]
     BusinessTravel: str

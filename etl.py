@@ -13,6 +13,7 @@ logging.basicConfig(
 )
 
 
+### run pipeline ###
 def run_pipeline():
     logging.info("==================================================")
     logging.info("🚀 DÉBUT DU PIPELINE ETL (SANS AIRFLOW)")
