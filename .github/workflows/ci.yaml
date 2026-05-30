@@ -27,6 +27,11 @@ jobs:
         run: pytest -v
         env:
           PYTHONPATH: ${{ github.workspace }}
+          IBM_ATTRITION_BASE_URL: ${{ secrets.IBM_ATTRITION_BASE_URL }}
+          IBM_ATTRITION_ENDPOINT: ${{ secrets.IBM_ATTRITION_ENDPOINT }}
+          IBM_ATTRITION_MODEL_API_BASE_URL: ${{ secrets.IBM_ATTRITION_MODEL_API_BASE_URL }}
+          IBM_ATTRITION_MODEL_API_PREDICT_ENDPOINT: ${{ vars.IBM_ATTRITION_MODEL_API_PREDICT_ENDPOINT }}
+          IBM_ATTRITION_MODEL_API_TIMEOUT: ${{ vars.IBM_ATTRITION_MODEL_API_TIMEOUT }}
 
       - name: Build Docker image
         run: docker build -t ibm-attrition-etl .

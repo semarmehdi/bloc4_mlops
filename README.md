@@ -136,7 +136,7 @@ demo-MLops/
 | Variable                                                             | Rôle                                      |
 | -------------------------------------------------------------------- | ----------------------------------------- |
 | `BACKEND_STORE_URI`                                                  | URL Neon (stocke runs, params, métriques) |
-| `ARTIFACT_STORE_URI`                                                 | `s3://mon-bucket/mlflow-artifacts`        |
+| `ARTIFACT_ROOT`                                                      | `s3://mon-bucket/mlflow-artifacts`        |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_DEFAULT_REGION` | Accès S3                                  |
 
 **`model_api/.env` et `train/.env`**
@@ -152,9 +152,9 @@ demo-MLops/
 
 ### a) Base Neon (Postgres)
 
-1. Crée un projet sur [neon.tech](https://neon.tech).
-2. Récupère la **connection string** (format `postgresql://...sslmode=require`).
-3. Elle servira à la fois au **backend MLflow** et à l'**ETL** (`DATABASE_URL`).
+1. Crée deux projets sur [neon.tech](https://neon.tech).
+2. Récupère les **connection string** (format `postgresql://...sslmode=require`).
+3. Une servira au **backend MLflow** (`BACKEND_STORE_URI`) et l'autre à l'**ETL** (`DATABASE_URL`).
 
 ### b) Bucket S3
 
@@ -180,30 +180,64 @@ Le serveur MLflow centralise tous tes entraînements. Il utilise Neon comme
 Exemple type (adapte à ce que tu as déjà) :
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.11
 
 WORKDIR /home/app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nano unzip curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+
+RUN curl -fsSL https://get.deta.dev/cli.sh | sh
+
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN ./aws/install
+
+
+
+# THIS IS SPECIFIC TO HUGGINFACE
+# We create a new user named "user" with ID of 1000
 RUN useradd -m -u 1000 user
-
-RUN pip install --no-cache-dir mlflow==3.5.0 psycopg2-binary boto3
-
+# We switch from "root" (default user when creating an image) to "user"
 USER user
-ENV HOME=/home/user PATH=/home/user/.local/bin:$PATH
+# We set two environmnet variables
+# so that we can give ownership to all files in there afterwards
+# we also add /home/user/.local/bin in the $PATH environment variable
+# PATH environment variable sets paths to look for installed binaries
+# We update it so that Linux knows where to look for binaries if we were to install them with "user".
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
 
-EXPOSE 7860
+# We set working directory to $HOME/app (<=> /home/user/app)
+WORKDIR $HOME/app
 
-# Les URI viennent des secrets HF (jamais en dur)
-CMD mlflow server \
+# Copy all local files to /home/user/app with "user" as owner of these files
+# Always use --chown=user when using HUGGINGFACE to avoid permission errors
+COPY --chown=user . $HOME/app
+
+
+COPY requirements.txt /dependencies/requirements.txt
+RUN pip install -r /dependencies/requirements.txt
+
+ENV AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+ENV AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+ENV BACKEND_STORE_URI=$BACKEND_STORE_URI
+ENV ARTIFACT_ROOT=$ARTIFACT_ROOT
+
+CMD mlflow server -p $PORT \
     --host 0.0.0.0 \
-    --port 7860 \
-    --backend-store-uri "$BACKEND_STORE_URI" \
-    --default-artifact-root "$ARTIFACT_STORE_URI"
+    --backend-store-uri $BACKEND_STORE_URI \
+    --default-artifact-root $ARTIFACT_ROOT \
+    --allowed-hosts "*"
 ```
 
 ### 1.3 Renseigner les secrets du Space
 
 Dans **Settings → Variables and secrets** du Space, ajoute (en _Secrets_) :
-`BACKEND_STORE_URI`, `ARTIFACT_STORE_URI`, `AWS_ACCESS_KEY_ID`,
+`BACKEND_STORE_URI`, `ARTIFACT_ROOT`, `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`.
 
 ### 1.4 Pousser et vérifier
@@ -211,10 +245,12 @@ Dans **Settings → Variables and secrets** du Space, ajoute (en _Secrets_) :
 ```bash
 cd mlflow_HF
 # copie ton Dockerfile + requirements, commit, push
-git add . && git commit -m "mlflow server" && git push
+git add .
+git commit -m "mlflow server"
+git push
 ```
 
-Une fois le Space _Running_, ouvre son URL : tu dois voir l'**interface MLflow**.
+Une fois le Space _Running_, ouvre son URL : tu dois voir l'**interface MLflow**, tu as trois petits points en haut à droite. Clique sur "embbed this space".
 Cette URL est ton `MLFLOW_TRACKING_URI`.
 
 ---
@@ -240,7 +276,6 @@ pip install -r train/requirements.txt
 MLFLOW_TRACKING_URI=https://<ton-space-mlflow>.hf.space
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
-AWS_DEFAULT_REGION=eu-west-3
 ```
 
 ### 2.3 Lancer l'entraînement
@@ -315,32 +350,49 @@ New Space → SDK **Docker** → clone-le (ton dossier `model_api_HF/`).
 ```dockerfile
 FROM python:3.11-slim
 
+RUN apt-get update -y
+RUN apt-get install nano unzip curl -y
+
+# # THIS IS SPECIFIC TO HUGGINFACE
+# # We create a new user named "user" with ID of 1000
+# RUN useradd -m -u 1000 user
+# # We switch from "root" (default user when creating an image) to "user"
+# USER user
+# # We set two environmnet variables
+# # so that we can give ownership to all files in there afterwards
+# # we also add /home/user/.local/bin in the $PATH environment variable
+# # PATH environment variable sets paths to look for installed binaries
+# # We update it so that Linux knows where to look for binaries if we were to install them with "user".
+# ENV HOME=/home/user \
+#     PATH=/home/user/.local/bin:$PATH
+
+# We set working directory to $HOME/app (<=> /home/user/app)
 WORKDIR /home/app
-RUN useradd -m -u 1000 user
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Leverage layer caching: copy only reqs first
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt
 
-COPY app.py .
-RUN chown -R user:user /home/app
+# # Copy all local files to /home/user/app with "user" as owner of these files
+# # Always use --chown=user when using HUGGINGFACE to avoid permission errors
+# COPY --chown=user . $HOME/app
 
-USER user
-ENV HOME=/home/user PATH=/home/user/.local/bin:$PATH
+COPY app.py /home/app/app.py
 
-EXPOSE 7860
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["bash","-lc","fastapi run app.py --host 0.0.0.0 --port ${PORT}"]
 ```
 
 ### 4.3 Secrets du Space
 
-`MLFLOW_TRACKING_URI`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`AWS_DEFAULT_REGION` (pour télécharger le modèle depuis S3).
+`MLFLOW_TRACKING_URI`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, (pour télécharger le modèle depuis S3).
 
 ### 4.4 Pousser et tester
 
 ```bash
 cd model_api_HF
-git add . && git commit -m "model api" && git push
+git add .
+git commit -m "model api"
+git push
 ```
 
 Une fois _Running_, teste la doc interactive : `https://<space>.hf.space/docs`,
@@ -362,11 +414,14 @@ Réponse attendue :
 
 ## 📡 Étape 5 — L'API de données
 
-Le dossier `ibmattritionapi/` contient l'API qui sert des lignes d'employés (un
+L'api `ibmattritionapi/` contient l'API qui sert des lignes d'employés (un
 Space HF séparé). Elle expose un endpoint (ex. `/current-employee`) qui renvoie un
 employé au format `{"columns": [...], "data": [[...]]}`. C'est la **source** de
 l'ETL. Déploie-la de la même façon (Space Docker), puis renseigne son URL dans
 `IBM_ATTRITION_BASE_URL` / `IBM_ATTRITION_ENDPOINT`.
+Voici l'url de base : `https://semarmehdi-ibmattritionapi.hf.space`
+Attention vous n'avez pas besoin de déployer cette api.
+Contactez-moi par message si elle ne tourne plus.
 
 ---
 
@@ -408,7 +463,7 @@ en minuscules, supprime-la d'abord :
 DROP TABLE IF EXISTS public.ibm_attrition_predictions;
 ```
 
----
+**Ou directement dans l'interface Neon à la main !**
 
 ## 🧫 Étape 7 — Les tests
 
@@ -423,9 +478,6 @@ Deux niveaux :
 pip install -r requirements-tests.txt
 pytest -v
 ```
-
-`monkeypatch` est une fixture fournie par pytest, `MagicMock` vient de
-`unittest.mock` (bibliothèque standard) : rien d'autre à installer.
 
 ---
 
