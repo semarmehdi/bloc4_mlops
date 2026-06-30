@@ -23,39 +23,16 @@ Le projet est réparti sur **deux dépôts complémentaires** :
 
 | Dépôt | Rôle |
 | --- | --- |
-| **demo-MLops** (ce dépôt) | Infrastructure de service : pipeline ETL, API modèle, serveur MLflow, CI/CD, tests |
+| **bloc4_mlops** (ce dépôt) | Infrastructure de service : pipeline ETL, API modèle, serveur MLflow, CI/CD, tests |
 | [**train-repo**](https://github.com/semarmehdi/train-repo) | (Ré)entraînement automatisé et monitoring de dérive (Evidently) |
 
 ---
 
 ## 2. Architecture
 
-```
-                      +--------------------------------+
-                      |   Serveur MLflow Tracking      |
-                      |   (HF Space - Docker)          |
-                      |   Backend  : Neon PostgreSQL   |
-                      |   Artifacts: S3                |
-                      +---------------+----------------+
-              log / register          |  charge le modèle @production
-        +----------------------------+ +------------------------------+
-        |                                                             |
-+-------+---------------------+                          +------------v-------------+
-|  train-repo                 |                          |  API Modèle (FastAPI)    |
-|  train.py (split, tuning,   |                          |  (HF Space - Docker)     |
-|  metriques, alias=challenger)|                         |  POST /predict           |
-|  monitoring.yaml (Evidently)|                          +------------+-------------+
-+-------+---------------------+                                       ^ POST /predict
-        ^ drift -> gh workflow run                                    |
-        |                                                +------------+-------------+
-        |  lit les predictions de prod (S3)              |  Pipeline ETL (ce depot) |
-        +------------------------------------------------+  etl.py + utils/         |
-                                                         |  extract -> API donnees  |
-                            +----------------------------+  transform -> API modele |
-                            |  API Donnees (HF Space)    |  load -> S3 + Neon        |
-                            |  GET /current-employee     +--------------------------+
-                            +----------------------------+
-```
+![Architecture MLOps](docs/diagrams/architecture.svg)
+
+> Source éditable : [`docs/diagrams/architecture.drawio`](docs/diagrams/architecture.drawio) (ouvrir avec [draw.io](https://app.diagrams.net)).
 
 Quatre composants sont déployés en tant que Spaces Docker sur Hugging Face (serveur
 MLflow, API modèle, API données) ; le pipeline ETL s'exécute en local, dans Docker
@@ -79,7 +56,7 @@ ou dans la CI. La boucle de monitoring et de réentraînement est portée par le
 ## 4. Structure du dépôt
 
 ```
-demo-MLops/
+bloc4_mlops/
 ├── .github/workflows/
 │   └── ci.yaml                 # CI : tests + build Docker + exécution ETL
 ├── mlflow/                     # Serveur MLflow (image à déployer sur HF)
@@ -245,6 +222,10 @@ au format `{"columns": [...], "data": [[...]]}`. C'est la source de l'ETL.
 URL de base : `https://semarmehdi-ibmattritionapi.hf.space` (déjà déployée).
 
 ### 7.6 Le pipeline ETL
+
+![Pipeline ETL](docs/diagrams/etl_flow.svg)
+
+> Source éditable : [`docs/diagrams/etl_flow.drawio`](docs/diagrams/etl_flow.drawio).
 
 `etl.py` orchestre le package `utils/` :
 
