@@ -8,7 +8,7 @@ Le tout testé et industrialisé via **GitHub Actions** et déployé sur **Huggi
 
 ---
 
-## 📐 Architecture
+## Architecture
 
 ```
                     ┌──────────────────────────────┐
