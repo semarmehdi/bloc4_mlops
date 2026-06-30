@@ -48,7 +48,7 @@ ou dans la CI.
 
 ---
 
-## 🗂️ Structure du projet
+## Structure du projet
 
 ```
 demo-MLops/
